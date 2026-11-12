@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#F4F0E7">
+  <title>Bot 办公楼</title>
+  <style>
+    :root {
+      --bg: #F4F0E7;
+      --ink: #1C1917;
+      --muted: #78716C;
+      --line: #E7E0D4;
+      --card: #FFFcf7;
+      --shadow: 0 10px 30px rgba(28, 25, 23, .06);
+      --working: #16A34A;
+      --idle: #A8A29E;
+      --waiting_user: #D97706;
+      --error: #DC2626;
+      --done: #2563EB;
+      --stuck: #EA580C;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--ink); }
+    body {
+      font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC", system-ui, sans-serif;
+      min-height: 100dvh;
+      padding: 16px 16px calc(24px + env(safe-area-inset-bottom));
+    }
+    header { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+    .title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    h1 { font-size: 22px; margin: 0; letter-spacing: .02em; }
+    .live { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--working); box-shadow: 0 0 0 4px rgba(22,163,74,.15); }
+    .dot.off { background: #A8A29E; box-shadow: none; }
+    .dot.err { background: var(--error); box-shadow: 0 0 0 4px rgba(220,38,38,.12); }
+    .summary { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      background: var(--card); border: 1px solid var(--line); border-radius: 999px;
+      padding: 6px 10px; font-size: 12px; color: var(--ink);
+    }
+    .chip b { font-weight: 650; }
+    .chip .n { color: var(--muted); margin-left: 4px; }
+    .floor {
+      background:
+        linear-gradient(#efe8da, #efe8da) 12px 12px / calc(100% - 24px) 1px no-repeat,
+        linear-gradient(#efe8da, #efe8da) 12px calc(100% - 12px) / calc(100% - 24px) 1px no-repeat,
+        var(--card);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      padding: 14px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .room {
+      background: #FBF7EF;
+      border: 1px solid #EDE6D8;
+      border-radius: 16px;
+      min-height: 118px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .room h2 {
+      margin: 0;
+      font-size: 11px;
+      font-weight: 650;
+      color: var(--muted);
+      letter-spacing: .08em;
+    }
+    .seats { display: flex; flex-direction: column; gap: 6px; }
+    .seat {
+      display: flex; align-items: center; gap: 8px;
+      background: #fff; border-radius: 12px; padding: 7px 8px;
+      border: 1px solid #F0EBE1;
+    }
+    .avatar {
+      width: 26px; height: 26px; border-radius: 8px; flex: none;
+      display: grid; place-items: center; color: #fff; font-size: 11px; font-weight: 700;
+    }
+    .seat .name { font-size: 13px; font-weight: 650; line-height: 1.2; }
+    .seat .meta { font-size: 11px; color: var(--muted); margin-top: 1px; }
+    .badge {
+      margin-left: auto; font-size: 10px; font-weight: 700; border-radius: 999px;
+      padding: 3px 7px; white-space: nowrap;
+    }
+    .list { display: flex; flex-direction: column; gap: 10px; }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+      padding: 14px; box-shadow: var(--shadow);
+    }
+    .card-top { display: flex; align-items: center; gap: 10px; }
+    .card .avatar { width: 36px; height: 36px; border-radius: 12px; font-size: 14px; }
+    .card h3 { margin: 0; font-size: 16px; }
+    .card .team { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .step { margin: 10px 0 0; font-size: 14px; line-height: 1.55; }
+    .when { margin-top: 6px; font-size: 12px; color: var(--muted); }
+    .banner {
+      background: #fff; border: 1px solid var(--line); border-radius: 16px;
+      padding: 16px; color: var(--muted); line-height: 1.6;
+    }
+    .working { color: var(--working); background: rgba(22,163,74,.12); }
+    .idle { color: #78716C; background: rgba(168,162,158,.16); }
+    .waiting_user { color: var(--waiting_user); background: rgba(217,119,6,.14); }
+    .error, .stuck { color: var(--error); background: rgba(220,38,38,.12); }
+    .done { color: var(--done); background: rgba(37,99,235,.12); }
+    .ring-working { box-shadow: 0 0 0 3px rgba(22,163,74,.35); }
+    .ring-waiting_user { box-shadow: 0 0 0 3px rgba(217,119,6,.4); }
+    .ring-error, .ring-stuck { box-shadow: 0 0 0 3px rgba(220,38,38,.35); }
+    .ring-done { box-shadow: 0 0 0 3px rgba(37,99,235,.3); }
+    footer { margin-top: 18px; font-size: 11px; color: var(--muted); line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title-row">
+      <h1>Bot 办公楼</h1>
+      <div class="live" id="live"><span class="dot off"></span><span>尚未连接</span></div>
+    </div>
+    <div class="summary" id="summary"></div>
+  </header>
+  <section class="floor" id="floor" hidden></section>
+  <section class="list" id="list"></section>
+  <footer>状态按完整中文名字区分，不会把不同 Bot 叠成同一个人。链接相当于密码，请不要转发。</footer>
+  <script>
+    const TEAMS = [
+      { id: "Ops", name: "统筹", bots: ["总裁助理"] },
+      { id: "Investing", name: "投资", bots: ["投资研究Bot"] },
+      { id: "Engineering", name: "研发", bots: ["技术研发Bot"] },
+      { id: "Research", name: "研究", bots: ["知识研究Bot", "语言Bot"] },
+      { id: "Media", name: "内容", bots: ["自媒体运营Bot", "视频制作Bot"] },
+      { id: "Life", name: "生活", bots: ["生活Bot", "邮件Bot"] },
+    ];
+    const COLORS = {
+      "总裁助理": "#1B4F8A",
+      "投资研究Bot": "#C9A227",
+      "技术研发Bot": "#2D84F5",
+      "知识研究Bot": "#5B4B8A",
+      "视频制作Bot": "#E85D04",
+      "语言Bot": "#0D9488",
+      "生活Bot": "#16A34A",
+      "自媒体运营Bot": "#E11D48",
+      "邮件Bot": "#6366F1",
+    };
+    const SHORT = {
+      "总裁助理": "总", "投资研究Bot": "投", "技术研发Bot": "研",
+      "知识研究Bot": "知", "视频制作Bot": "视", "语言Bot": "语",
+      "生活Bot": "生", "自媒体运营Bot": "媒", "邮件Bot": "邮",
+    };
+    const STATUS_LABEL = {
+      working: "工作中", idle: "休息", waiting_user: "等你确认",
+      error: "出错", done: "刚完成", stuck: "可能卡住",
+    };
+    const KNOWN = TEAMS.flatMap((t) => t.bots);
+    const TEAM_OF = Object.fromEntries(TEAMS.flatMap((t) => t.bots.map((b) => [b, t.name])));
+    const STEP_ZH = [
+      [/await save or deploy authorization/i, "等待你授权保存或部署"],
+      [/confirm v30 local done to user/i, "正在向你确认 v30 本地已完成"],
+      [/v30 local done, tests passed EXIT 0, not saved or deployed/i, "v30 本地已完成，测试通过，尚未保存或部署"],
+      [/status check.*/i, "连通检查"],
+      [/Setting up the 3D office dashboard/i, "正在接入 3D 办公楼"],
+      [/Publishing setup usage and routines/i, "正在发布用量和定时任务"],
+      [/3D office setup complete/i, "3D 办公楼已接入完成"],
+      [/Reviewing status-check replies/i, "正在查看连通检查回复"],
+      [/Noted paused routines after status check/i, "已记录暂停中的例行任务"],
+      [/Answered mobile browser can open the 3D office/i, "已说明手机浏览器可以打开办公楼"],
+      [/Building a Chinese 2D office dashboard/i, "正在制作中文平面看板"],
+      [/no active editing tasks/i, "没有进行中的剪辑任务"],
+      [/todo list cleared, yoga mat done/i, "待办已清空"],
+      [/mark yoga mat todo done/i, "正在更新待办"],
+      [/replied status to .*/i, "已回复状态检查"],
+      [/已回复总裁助理.*/i, null],
+    ];
+
+    const bots = {};
+    for (const name of KNOWN) {
+      bots[name] = { name, status: "idle", step: "", at: 0, seen: false };
+    }
+
+    const $ = (id) => document.getElementById(id);
+    const live = $("live");
+    const summary = $("summary");
+    const floor = $("floor");
+    const list = $("list");
+
+    function topicFromLink() {
+      const hash = decodeURIComponent((location.hash || "").replace(/^#/, "")).split("&")[0].trim();
+      if (/^[A-Za-z0-9_-]{6,64}$/.test(hash)) return hash;
+      const q = new URLSearchParams(location.search).get("topic");
+      if (q && /^[A-Za-z0-9_-]{6,64}$/.test(q)) return q;
+      return null;
+    }
+
+    function translateStep(step) {
+      const s = (step || "").trim();
+      if (!s) return "";
+      for (const [re, zh] of STEP_ZH) {
+        if (re.test(s)) return zh === null ? s : zh;
+      }
+      return s;
+    }
+
+    function displayStatus(bot, now = Date.now()) {
+      let status = bot.status || "idle";
+      let note = "";
+      if (status === "working" && bot.at && now - bot.at > 20 * 60 * 1000) {
+        status = "stuck";
+        note = "较久未更新，可能已经结束但没上报";
+      }
+      if (status === "done" && bot.at && now - bot.at > 60 * 1000) {
+        status = "idle";
+      }
+      return { status, note };
+    }
+
+    function fmtTime(ms) {
+      if (!ms) return "暂无上报";
+      const diff = Date.now() - ms;
+      if (diff < 60 * 1000) return "刚刚";
+      if (diff < 60 * 60 * 1000) return `${Math.floor(diff / 60000)} 分钟前`;
+      const d = new Date(ms);
+      const t = new Intl.DateTimeFormat("zh-CN", {
+        timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+      }).format(d);
+      const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(new Date());
+      const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(d);
+      return day === today ? `今天 ${t}` : `${day.slice(5).replace("-", "月")}日 ${t}`;
+    }
+
+    function applyMessage(text, timeSec) {
+      let obj;
+      try { obj = JSON.parse(text); } catch { return; }
+      const at = (timeSec ? timeSec * 1000 : Date.now());
+      if (obj && obj.bot && obj.status) {
+        const name = String(obj.bot);
+        if (!bots[name]) bots[name] = { name, status: "idle", step: "", at: 0, seen: false };
+        bots[name].status = String(obj.status);
+        bots[name].step = obj.step ? String(obj.step) : "";
+        bots[name].at = at;
+        bots[name].seen = true;
+      }
+    }
+
+    function render() {
+      const now = Date.now();
+      const known = Object.values(bots);
+      const counts = { working: 0, waiting_user: 0, idle: 0, error: 0, done: 0, stuck: 0 };
+      for (const b of known) counts[displayStatus(b, now).status]++;
+
+      const rows = [
+        ["工作中", counts.working],
+        ["等你确认", counts.waiting_user],
+        ["休息", counts.idle],
+      ];
+      if (counts.done) rows.push(["刚完成", counts.done]);
+      if (counts.error + counts.stuck) rows.push(["需留意", counts.error + counts.stuck]);
+      summary.innerHTML = rows.map(([k, n]) => `<span class="chip"><b>${k}</b><span class="n">${n}</span></span>`).join("");
+
+      floor.hidden = false;
+      floor.innerHTML = TEAMS.map((team) => {
+        const seats = team.bots.map((name) => seatHtml(bots[name], now, true)).join("");
+        return `<article class="room"><h2>${team.name}</h2><div class="seats">${seats}</div></article>`;
+      }).join("");
+
+      const extra = known.filter((b) => !KNOWN.includes(b.name));
+      const ordered = TEAMS.flatMap((t) => t.bots.map((n) => bots[n])).concat(extra);
+      list.innerHTML = ordered.map((b) => cardHtml(b, now)).join("");
+    }
+
+    function seatHtml(bot, now, compact) {
+      const { status } = displayStatus(bot, now);
+      const color = COLORS[bot.name] || "#78716C";
+      return `<div class="seat">
+        <div class="avatar ring-${status}" style="background:${color}">${SHORT[bot.name] || bot.name.slice(0,1)}</div>
+        <div>
+          <div class="name">${bot.name}</div>
+          ${compact ? "" : ""}
+        </div>
+        <span class="badge ${status}">${STATUS_LABEL[status] || status}</span>
+      </div>`;
+    }
+
+    function cardHtml(bot, now) {
+      const { status, note } = displayStatus(bot, now);
+      const color = COLORS[bot.name] || "#78716C";
+      const step = translateStep(bot.step) || note || (status === "idle" ? "当前没有进行中的任务" : "");
+      return `<article class="card">
+        <div class="card-top">
+          <div class="avatar ring-${status}" style="background:${color}">${SHORT[bot.name] || bot.name.slice(0,1)}</div>
+          <div style="flex:1">
+            <h3>${bot.name}</h3>
+            <div class="team">${TEAM_OF[bot.name] || "其他"}</div>
+          </div>
+          <span class="badge ${status}">${STATUS_LABEL[status] || status}</span>
+        </div>
+        <p class="step">${escapeHtml(step)}</p>
+        <div class="when">${fmtTime(bot.at)}</div>
+      </article>`;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function setLive(kind, text) {
+      live.innerHTML = `<span class="dot ${kind === "ok" ? "" : kind === "err" ? "err" : "off"}"></span><span>${text}</span>`;
+    }
+
+    async function connect() {
+      const topic = topicFromLink();
+      if (!topic) {
+        list.innerHTML = `<div class="banner">请使用完整链接打开这个看板。链接相当于密码，打开后会自动连接实时状态。</div>`;
+        return;
+      }
+      const base = `https://ntfy.sh/${encodeURIComponent(topic)}`;
+      setLive("off", "正在连接…");
+      try {
+        const res = await fetch(`${base}/json?poll=1&since=12h`, { cache: "no-store" });
+        if (!res.ok) throw new Error("http " + res.status);
+        const lines = (await res.text()).trim().split("\n").filter(Boolean);
+        for (const line of lines) {
+          const ev = JSON.parse(line);
+          if (ev.message) applyMessage(ev.message, ev.time);
+        }
+        render();
+        setLive("ok", "实时更新中");
+      } catch (err) {
+        render();
+        setLive("err", "暂时连不上状态频道，已显示最近一次结果");
+      }
+      // live stream
+      try {
+        const es = new EventSource(`${base}/sse?since=10s`);
+        es.onmessage = (e) => {
+          try {
+            const ev = JSON.parse(e.data);
+            if (ev.message) {
+              applyMessage(ev.message, ev.time);
+              render();
+              setLive("ok", "实时更新中");
+            }
+          } catch {}
+        };
+        es.onerror = () => setLive("err", "连接中断，正在重试");
+      } catch {
+        setInterval(async () => {
+          try {
+            const res = await fetch(`${base}/json?poll=1&since=5m`, { cache: "no-store" });
+            const lines = (await res.text()).trim().split("\n").filter(Boolean);
+            for (const line of lines) {
+              const ev = JSON.parse(line);
+              if (ev.message) applyMessage(ev.message, ev.time);
+            }
+            render();
+            setLive("ok", "实时更新中");
+          } catch {}
+        }, 8000);
+      }
+      setInterval(render, 30000);
+    }
+
+    connect();
+  </script>
+</body>
+</html>
